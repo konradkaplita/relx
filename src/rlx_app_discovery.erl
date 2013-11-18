@@ -52,8 +52,38 @@ format_error(ErrorDetails)
 %%%===================================================================
 %%% Internal Functions
 %%%===================================================================
+
+-spec app_files(list(binary())) -> list(binary()).
+app_files(LibDirs) ->
+    lists:foldl(
+      fun(LibDir, Acc) ->
+              AppPath = filename:join([binary_to_list(LibDir),
+                                       "*",
+                                       "ebin",
+                                       "*.app"]),
+              Files = filelib:wildcard(AppPath),
+              BinFiles = lists:map(fun(F) ->
+                                           list_to_binary(F)
+                                   end, Files),
+              Acc ++ BinFiles
+      end, [], LibDirs).
+
+-spec get_app_metadata(rlx_state:t(), list(binary())) -> list({ok, rlx_app_info:t()}).
+get_app_metadata(State, LibDirs) ->
+    lists:foldl(fun(AppFile, Acc) ->
+                        case is_valid_otp_app(AppFile) of
+                            {ok, _} = AppMeta ->
+                                [AppMeta|Acc];
+                            {warning, W} ->
+                                ec_cmd_log:warn(rlx_state:log(State), format_detail(W)),
+                                Acc;
+                            _ ->
+                                Acc
+                        end
+                end, [], app_files(LibDirs)).
+
 resolve_app_metadata(State, LibDirs) ->
-    AppMeta0 = lists:flatten(rlx_dscv_util:do(fun discover_dir/2, LibDirs)),
+    AppMeta0 = get_app_metadata(State, LibDirs),
     case [case Err of
               {error, Ret} ->
                   Ret
@@ -131,13 +161,6 @@ format_detail({unversioned_app, AppDir, _AppName}) ->
                   [AppDir]);
 format_detail({app_info_error, {Module, Detail}}) ->
     Module:format_error(Detail).
-
--spec discover_dir([file:name()], directory | file) ->
-                          {ok, rlx_app_info:t()} | {error, Reason::term()}.
-discover_dir(_File, directory) ->
-    {noresult, true};
-discover_dir(File, file) ->
-    is_valid_otp_app(File).
 
 -spec is_valid_otp_app(file:name()) -> {ok, rlx_app_info:t()} | {error, Reason::term()} |
                                        {noresult, false}.
