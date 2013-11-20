@@ -57,16 +57,26 @@ format_error(ErrorDetails)
 app_files(LibDirs) ->
     lists:foldl(
       fun(LibDir, Acc) ->
-              AppPath = filename:join([binary_to_list(LibDir),
-                                       "*",
-                                       "ebin",
-                                       "*.app"]),
-              Files = filelib:wildcard(AppPath),
+              Files = app_files_paths(LibDir),
               BinFiles = lists:map(fun(F) ->
                                            list_to_binary(F)
                                    end, Files),
               Acc ++ BinFiles
       end, [], LibDirs).
+
+app_files_paths(LibDir) ->
+    %% Search for Erlang apps in the lib dir itself
+    Path1 = filename:join([binary_to_list(LibDir),
+                           "*.app"]),
+    %% Search for Erlang apps in subdirs of lib dir
+    Path2 = filename:join([binary_to_list(LibDir),
+                           "*",
+                           "ebin",
+                           "*.app"]),
+    lists:foldl(fun(Path, Acc) ->
+                        Files = filelib:wildcard(Path),
+                        Files ++ Acc
+                end, [], [Path1, Path2]).
 
 -spec get_app_metadata(rlx_state:t(), list(binary())) -> list({ok, rlx_app_info:t()}).
 get_app_metadata(State, LibDirs) ->
